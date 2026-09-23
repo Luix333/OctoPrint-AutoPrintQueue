@@ -1,0 +1,82 @@
+<h3>Auto Print Queue</h3>
+<form class="form-horizontal" onsubmit="return false;">
+    <fieldset>
+        <legend>Between prints</legend>
+        <div class="control-group">
+            <div class="controls">
+                <label class="checkbox">
+                    <input type="checkbox" data-bind="checked: settings.plugins.autoprintqueue.require_approval">
+                    Wait for my approval before starting the next print
+                </label>
+                <span class="help-block">After a print ends, the queue pauses and shows a "Bed is clear" button (and a popup). Pressing <em>Start queue</em> also counts as approval.</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <div class="controls">
+                <label class="checkbox">
+                    <input type="checkbox" data-bind="checked: settings.plugins.autoprintqueue.between_enabled">
+                    Run G-code / macros between prints
+                </label>
+            </div>
+        </div>
+        <div class="control-group">
+            <label class="control-label">Between-prints G-code</label>
+            <div class="controls">
+                <textarea rows="6" class="input-block-level apq-code" data-bind="value: settings.plugins.autoprintqueue.between_gcode, enable: settings.plugins.autoprintqueue.between_enabled" placeholder="; e.g. park and wait for the bed to cool&#10;G28&#10;TEMPERATURE_WAIT SENSOR=heater_bed MAXIMUM=35"></textarea>
+                <span class="help-block">Sent after a print finishes, only when another queued print is waiting. One command or Klipper macro per line; <code>;</code> starts a comment. The queue waits until the printer has executed every line before it goes on.</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label class="control-label">Extra wait</label>
+            <div class="controls">
+                <div class="input-append">
+                    <input type="number" min="0" class="input-mini" data-bind="value: settings.plugins.autoprintqueue.delay_seconds">
+                    <span class="add-on">seconds</span>
+                </div>
+                <span class="help-block">Pause after the G-code above before the next print (or the approval prompt).</span>
+            </div>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>When the queue is done</legend>
+        <div class="control-group">
+            <div class="controls">
+                <label class="checkbox">
+                    <input type="checkbox" data-bind="checked: settings.plugins.autoprintqueue.finished_enabled">
+                    Run G-code when the last queued print finishes
+                </label>
+                <textarea rows="4" class="input-block-level apq-code" data-bind="value: settings.plugins.autoprintqueue.finished_gcode, enable: settings.plugins.autoprintqueue.finished_enabled" placeholder="; e.g. turn everything off&#10;M84&#10;M107"></textarea>
+            </div>
+        </div>
+    </fieldset>
+    <fieldset>
+        <legend>Safety</legend>
+        <div class="control-group">
+            <label class="control-label">If a print fails or is cancelled</label>
+            <div class="controls">
+                <select data-bind="value: settings.plugins.autoprintqueue.on_failure">
+                    <option value="pause">Stop the queue</option>
+                    <option value="continue">Keep going with the next print</option>
+                </select>
+            </div>
+        </div>
+        <div class="control-group">
+            <label class="control-label">G-code timeout</label>
+            <div class="controls">
+                <div class="input-append">
+                    <input type="number" min="10" class="input-mini" data-bind="value: settings.plugins.autoprintqueue.macro_timeout">
+                    <span class="add-on">seconds</span>
+                </div>
+                <span class="help-block">Stop the queue if the between-prints G-code has not finished by then.</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <div class="controls">
+                <label class="checkbox">
+                    <input type="checkbox" data-bind="checked: settings.plugins.autoprintqueue.file_button">
+                    Show the "Add to queue" button in the Files panel (reload the page after changing)
+                </label>
+            </div>
+        </div>
+    </fieldset>
+</form>

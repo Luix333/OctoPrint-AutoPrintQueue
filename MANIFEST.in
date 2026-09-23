@@ -1,0 +1,6 @@
+include README.md
+include LICENSE
+recursive-include octoprint_autoprintqueue/templates *
+recursive-include octoprint_autoprintqueue/static *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

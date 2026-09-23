@@ -1,0 +1,83 @@
+.apq-status {
+    border: 1px solid #ddd;
+    border-left-width: 4px;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+.apq-status-main .apq-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: #999;
+}
+.apq-status-detail {
+    margin-left: 8px;
+    color: #666;
+}
+.apq-status-message {
+    margin-top: 4px;
+}
+.apq-state-running { border-left-color: #5bb75b; }
+.apq-state-running .apq-dot { background: #5bb75b; }
+.apq-state-approval { border-left-color: #faa732; }
+.apq-state-approval .apq-dot { background: #faa732; }
+.apq-state-stopped { border-left-color: #999; }
+
+.apq-approval-actions {
+    margin-top: 8px;
+}
+
+.apq-toolbar {
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+.apq-toolbar .btn-group,
+.apq-toolbar .apq-approval-toggle {
+    display: inline-block;
+    vertical-align: middle;
+}
+.apq-toolbar .apq-approval-toggle {
+    margin: 0 0 0 16px;
+}
+
+.apq-add {
+    margin-bottom: 10px;
+}
+.apq-add .apq-file-select {
+    width: 45%;
+    min-width: 220px;
+}
+
+.apq-table-wrap {
+    overflow-x: auto;
+}
+.apq-table {
+    table-layout: auto;  /* OctoPrint makes tab tables fixed, which squashes the file column */
+}
+.apq-table td {
+    vertical-align: middle;
+}
+.apq-table .apq-col-on { width: 24px; text-align: center; }
+.apq-table .apq-name { min-width: 120px; word-break: break-word; }
+.apq-table .apq-col-copies { white-space: nowrap; }
+.apq-table .apq-col-copies input { width: 40px; margin: 0; }
+.apq-table .apq-col-when a { white-space: nowrap; }
+.apq-table .apq-countdown { display: block; font-size: 11px; color: #999; white-space: nowrap; }
+.apq-table .apq-col-actions { text-align: right; white-space: nowrap; }
+.apq-table .apq-pos { color: #999; margin-right: 4px; }
+.apq-schedule-edit input[type="datetime-local"] {
+    width: 190px;
+    margin: 0 0 4px 0;
+}
+
+.apq-row-printing td { background: #eaf4ea; }
+.apq-row-done td { color: #999; }
+.apq-row-failed td { color: #b94a48; }
+.apq-row-disabled td.apq-name { color: #999; text-decoration: line-through; }
+
+.apq-code {
+    font-family: monospace;
+}

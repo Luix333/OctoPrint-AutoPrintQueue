@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "OctoPrint-AutoPrintQueue"
+version = "0.1.0"
+description = "Print queue for OctoPrint: starts the next job when the current one finishes, with between-print macros, scheduling and optional bed-clear approval"
+readme = "README.md"
+requires-python = ">=3.7"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "Luix333" }]
+keywords = ["octoprint", "queue", "print queue", "batch printing", "scheduler", "klipper"]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Luix333/OctoPrint-AutoPrintQueue"
+
+[project.entry-points."octoprint.plugin"]
+autoprintqueue = "octoprint_autoprintqueue"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["octoprint_autoprintqueue*"]
+
+[tool.setuptools.package-data]
+octoprint_autoprintqueue = ["templates/*.jinja2", "static/js/*.js", "static/css/*.css"]

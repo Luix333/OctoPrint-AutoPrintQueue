@@ -1,0 +1,91 @@
+<div id="apq" class="apq">
+    <div class="apq-status" data-bind="css: statusClass">
+        <div class="apq-status-main">
+            <span class="apq-dot"></span>
+            <strong data-bind="text: statusText"></strong>
+            <span class="apq-status-detail" data-bind="text: statusDetail"></span>
+        </div>
+        <div class="apq-status-message muted" data-bind="visible: message, text: message"></div>
+    </div>
+
+    <div class="apq-approval alert alert-block" data-bind="visible: state() == 'approval'">
+        <strong>Waiting for your approval.</strong>
+        The previous print finished. Clear the bed, then start
+        <strong data-bind="text: approvalName"></strong>.
+        <div class="apq-approval-actions">
+            <button class="btn btn-success" data-bind="click: approve, enable: canControl"><i class="fas fa-play"></i> Bed is clear, start next print</button>
+            <button class="btn" data-bind="click: stop, enable: canControl">Stop queue</button>
+        </div>
+    </div>
+
+    <div class="apq-toolbar">
+        <div class="btn-group">
+            <button class="btn btn-primary" data-bind="visible: !running(), click: start, enable: canControl() && hasPending()"><i class="fas fa-play"></i> Start queue</button>
+            <button class="btn" data-bind="visible: running(), click: stop, enable: canControl"><i class="fas fa-stop"></i> Stop queue</button>
+            <button class="btn" data-bind="visible: state() == 'delay', click: skipDelay, enable: canControl"><i class="fas fa-forward"></i> Skip wait</button>
+        </div>
+        <label class="checkbox apq-approval-toggle" title="After a print finishes, wait until you confirm the bed is clear before starting the next one">
+            <input type="checkbox" data-bind="checked: requireApproval, enable: canControl"> Wait for my approval between prints
+        </label>
+        <button class="btn btn-small pull-right" data-bind="click: clearFinished, enable: canControl() && hasFinished()" title="Remove done, failed and cancelled prints from the list"><i class="fas fa-broom"></i> Clear finished</button>
+    </div>
+
+    <form class="apq-add form-inline" data-bind="submit: addSelected">
+        <select data-bind="options: availableFiles, optionsText: 'label', optionsValue: 'key', value: fileToAdd, optionsCaption: 'Add a file to the queue…'" class="apq-file-select"></select>
+        <button type="submit" class="btn" data-bind="enable: fileToAdd() && canControl()"><i class="fas fa-plus"></i> Add</button>
+        <button type="button" class="btn btn-link" data-bind="click: refreshFiles" title="Reload the file list"><i class="fas fa-sync"></i></button>
+        <span class="help-inline muted">Tip: use the <i class="fas fa-list-ol"></i> button next to any file in the Files panel.</span>
+    </form>
+
+    <div class="apq-table-wrap" data-bind="visible: items().length">
+    <table class="table table-condensed apq-table">
+        <thead>
+            <tr>
+                <th class="apq-col-on" title="Enabled prints run; disabled prints are skipped until re-enabled">On</th>
+                <th>File</th>
+                <th class="apq-col-copies" title="How many times to print it">Copies</th>
+                <th class="apq-col-when">Start</th>
+                <th class="apq-col-status">Status</th>
+                <th class="apq-col-actions"></th>
+            </tr>
+        </thead>
+        <tbody data-bind="foreach: items">
+            <tr data-bind="css: rowClass">
+                <td class="apq-col-on"><input type="checkbox" data-bind="checked: enabled, enable: $parent.canControl() && status() != 'printing'"></td>
+                <td class="apq-name">
+                    <span class="apq-pos" data-bind="text: ($index() + 1) + '.'"></span>
+                    <span data-bind="text: name, attr: {title: origin + ':' + path}"></span>
+                    <span class="label" data-bind="visible: origin == 'sdcard'">SD</span>
+                    <span class="label label-info" data-bind="visible: isNext">next</span>
+                </td>
+                <td class="apq-col-copies">
+                    <input type="number" min="1" class="input-mini" data-bind="value: copies, enable: $parent.canControl() && status() != 'printing'">
+                </td>
+                <td class="apq-col-when">
+                    <div data-bind="visible: !editingSchedule()">
+                        <a href="#" data-bind="click: editSchedule, text: scheduleText, css: {muted: !scheduledAt()}" title="Click to schedule this print"></a>
+                        <span class="apq-countdown" data-bind="visible: scheduleCountdown, text: scheduleCountdown"></span>
+                    </div>
+                    <div data-bind="visible: editingSchedule" class="apq-schedule-edit">
+                        <input type="datetime-local" data-bind="value: scheduleInput">
+                        <button class="btn btn-mini btn-primary" data-bind="click: saveSchedule">Set</button>
+                        <button class="btn btn-mini" data-bind="click: clearSchedule" title="Start as soon as possible">Now</button>
+                        <button class="btn btn-mini btn-link" data-bind="click: cancelSchedule">Cancel</button>
+                    </div>
+                </td>
+                <td class="apq-col-status"><span data-bind="text: statusText, attr: {title: result() || ''}"></span></td>
+                <td class="apq-col-actions">
+                    <div class="btn-group">
+                        <button class="btn btn-mini" data-bind="click: $parent.moveUp, enable: $parent.canControl() && $index() > 0" title="Move up"><i class="fas fa-arrow-up"></i></button>
+                        <button class="btn btn-mini" data-bind="click: $parent.moveDown, enable: $parent.canControl() && $index() < $parent.items().length - 1" title="Move down"><i class="fas fa-arrow-down"></i></button>
+                        <button class="btn btn-mini" data-bind="click: $parent.printNow, enable: $parent.canPrintNow" title="Print this now (ignores schedule and approval)"><i class="fas fa-print"></i></button>
+                        <button class="btn btn-mini" data-bind="visible: status() != 'pending' && status() != 'printing', click: $parent.requeue, enable: $parent.canControl" title="Put back in the queue"><i class="fas fa-redo"></i></button>
+                        <button class="btn btn-mini btn-danger" data-bind="click: $parent.remove, enable: $parent.canControl() && status() != 'printing'" title="Remove from queue"><i class="far fa-trash-alt"></i></button>
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+    <p class="muted apq-empty" data-bind="visible: !items().length">The queue is empty. Add a file above or from the Files panel.</p>
+</div>
