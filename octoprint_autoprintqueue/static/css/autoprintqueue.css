@@ -46,9 +46,17 @@
 .apq-add {
     margin-bottom: 10px;
 }
-.apq-add .apq-file-select {
+.apq-add form {
+    margin-bottom: 6px;
+}
+.apq-add .apq-add-select {
     width: 45%;
     min-width: 220px;
+}
+.apq-insert-chip a {
+    color: #fff;
+    margin-left: 4px;
+    font-weight: bold;
 }
 
 .apq-table-wrap {
@@ -73,7 +81,20 @@
     margin: 0 0 4px 0;
 }
 
-.apq-row-printing td { background: #eaf4ea; }
+.apq-row-node td { background: #f7f9fc; }
+.apq-row-node .fa-code { color: #3a87ad; }
+.apq-row-active td { background: #eaf4ea; }
+.apq-node-title { font-weight: 600; }
+.apq-node-code {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: #666;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    white-space: normal;
+}
 .apq-row-done td { color: #999; }
 .apq-row-failed td { color: #b94a48; }
 .apq-row-disabled td.apq-name { color: #999; text-decoration: line-through; }
@@ -81,3 +102,105 @@
 .apq-code {
     font-family: monospace;
 }
+
+/* node editor */
+.apq-editor {
+    margin-top: 4px;
+    max-width: 460px;
+}
+.apq-editor input,
+.apq-editor textarea {
+    margin-bottom: 4px;
+}
+.apq-editor-macro input {
+    width: 220px;
+}
+
+/* library */
+.apq-library {
+    margin-top: 18px;
+    border-top: 1px solid #eee;
+    padding-top: 6px;
+}
+.apq-library-head {
+    margin: 4px 0 8px 0;
+}
+.apq-library-head a {
+    color: inherit;
+    text-decoration: none;
+}
+.apq-lib-table {
+    table-layout: auto;
+}
+.apq-new-lib {
+    margin-bottom: 8px;
+}
+.apq-macro-info {
+    margin-left: 12px;
+}
+
+/* sidebar panel */
+.apq-side-status {
+    border-left: 4px solid #999;
+    padding: 2px 0 2px 8px;
+    margin-bottom: 8px;
+}
+.apq-side-status.apq-state-running { border-left-color: #5bb75b; }
+.apq-side-status.apq-state-approval { border-left-color: #faa732; }
+.apq-side-status .apq-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    background: #999;
+}
+.apq-side-status.apq-state-running .apq-dot { background: #5bb75b; }
+.apq-side-status.apq-state-approval .apq-dot { background: #faa732; }
+.apq-side-detail {
+    font-size: 12px;
+    word-break: break-word;
+}
+.apq-side-controls .btn-block {
+    margin-bottom: 6px;
+}
+.apq-side-approval {
+    margin: 6px 0 4px 0;
+    font-size: 12px;
+}
+.apq-side-list {
+    list-style: none;
+    margin: 6px 0 0 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+.apq-side-list li {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 2px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 12px;
+}
+.apq-side-list li input[type="checkbox"] {
+    margin: 0;
+}
+.apq-side-list .apq-side-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.apq-side-list .apq-side-state {
+    color: #888;
+    white-space: nowrap;
+    font-size: 11px;
+}
+.apq-side-list li.apq-row-node { padding-left: 14px; color: #555; }
+.apq-side-list li.apq-row-node .fa-code { color: #3a87ad; }
+.apq-side-list li.apq-row-active { background: #eaf4ea; font-weight: 600; }
+.apq-side-list li.apq-row-next .apq-side-name { font-weight: 600; }
+.apq-side-list li.apq-row-done { color: #aaa; }
+.apq-side-list li.apq-row-failed { color: #b94a48; }
+.apq-side-list li.apq-row-disabled .apq-side-name { text-decoration: line-through; color: #aaa; }

@@ -7,10 +7,12 @@ import time
 
 import octoprint.plugin
 
-from .core import DEFAULT_SETTINGS, FAILED, PRINTING, QueueItem, QueueRunner
+from .core import DEFAULT_SETTINGS, FAILED, PRINTING, RUNNING, LibraryNode, QueueItem, QueueRunner, parse_help_line
 
 MARKER = "autoprintqueue_done"
 STATE_FILE = "queue.json"
+MACROS_FILE = "macros.json"
+HELP_CAPTURE_SECONDS = 8
 
 
 def _can(permission_name):
@@ -36,6 +38,9 @@ class AutoPrintQueuePlugin(
         self._runner = None
         self._timer = None
         self._save_lock = threading.Lock()
+        self._macros = []
+        self._help_until = 0
+        self._help_found = {}
 
     # ---------------------------------------------------------------- startup
 
@@ -49,7 +54,7 @@ class AutoPrintQueuePlugin(
             except Exception:
                 self._logger.warning("Dropping unreadable queue entry: %r", raw)
                 continue
-            if item.status == PRINTING:
+            if item.status in (PRINTING, RUNNING):
                 # OctoPrint went down mid-print; that print is gone.
                 item.status = FAILED
                 item.result = "Interrupted (OctoPrint restarted)"
@@ -60,12 +65,14 @@ class AutoPrintQueuePlugin(
             self,
             get_settings=self._current_settings,
             items=items,
+            library=[LibraryNode.from_dict(n) for n in state.get("library", [])],
             running=bool(state.get("running")) and not interrupted,
             needs_clear=bool(state.get("needs_clear")) or interrupted,
         )
         if interrupted:
             self._runner.message = "Queue stopped: a queued print was interrupted by a restart"
         self._save_state()
+        self._macros = self._load_json(MACROS_FILE, [])
 
         from octoprint.util import RepeatedTimer
 
@@ -87,23 +94,25 @@ class AutoPrintQueuePlugin(
 
     # ------------------------------------------------------------ persistence
 
-    def _state_path(self):
-        return os.path.join(self.get_plugin_data_folder(), STATE_FILE)
-
     def _load_state(self):
-        path = self._state_path()
+        return self._load_json(STATE_FILE, {})
+
+    def _save_state(self):
+        self._write_json(STATE_FILE, self._runner.persistent_state())
+
+    def _load_json(self, name, default):
+        path = os.path.join(self.get_plugin_data_folder(), name)
         if not os.path.exists(path):
-            return {}
+            return default
         try:
             with io.open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            self._logger.exception("Could not read %s, starting with an empty queue", path)
-            return {}
+            self._logger.exception("Could not read %s", path)
+            return default
 
-    def _save_state(self):
-        data = self._runner.persistent_state()
-        path = self._state_path()
+    def _write_json(self, name, data):
+        path = os.path.join(self.get_plugin_data_folder(), name)
         tmp = path + ".tmp"
         with self._save_lock:
             with io.open(tmp, "w", encoding="utf-8") as f:
@@ -153,10 +162,49 @@ class AutoPrintQueuePlugin(
         payload.update(extra)
         self._plugin_manager.send_plugin_message(self._identifier, payload)
 
+    def _snapshot(self):
+        data = self._runner.snapshot()
+        data["macros"] = self._macros
+        data["macros_loading"] = time.time() < self._help_until
+        return data
+
     def _push_state(self):
         payload = {"type": "state"}
-        payload.update(self._runner.snapshot())
+        payload.update(self._snapshot())
         self._plugin_manager.send_plugin_message(self._identifier, payload)
+
+    # ------------------------------------------------ printer macro list
+
+    def refresh_macros(self, quiet=False):
+        """Ask Klipper for its command list; the reply is read by on_gcode_received."""
+        if not self._printer.is_operational():
+            raise ValueError("Connect to the printer first")
+        self._help_quiet = quiet
+        self._help_found = {}
+        self._help_until = time.time() + HELP_CAPTURE_SECONDS
+        self._printer.commands(["HELP"], tags={"trigger:autoprintqueue"})
+        timer = threading.Timer(HELP_CAPTURE_SECONDS + 0.5, self._finish_macro_capture)
+        timer.daemon = True
+        timer.start()
+
+    def _finish_macro_capture(self):
+        self._help_until = 0
+        found = self._help_found
+        self._help_found = {}
+        if found:
+            self._macros = [{"name": k, "description": found[k]} for k in sorted(found)]
+            self._write_json(MACROS_FILE, self._macros)
+            self._logger.info("Loaded %d printer macros/commands", len(self._macros))
+        elif not getattr(self, "_help_quiet", False):
+            self.notify("error", "The printer did not answer HELP with a command list (this needs Klipper)")
+        self._push_state()
+
+    def on_gcode_received(self, comm, line, *args, **kwargs):
+        if self._help_until and time.time() < self._help_until:
+            parsed = parse_help_line(line)
+            if parsed:
+                self._help_found[parsed[0]] = parsed[1]
+        return line
 
     def _current_settings(self):
         return {key: self._settings.get([key]) for key in DEFAULT_SETTINGS}
@@ -187,6 +235,17 @@ class AutoPrintQueuePlugin(
             self._runner.on_print_ended(origin, path, outcome, reason=reason)
         elif event == "ClientOpened":
             self._push_state()
+        elif event == "Connected" and not self._macros:
+            # fill the macro list once, so node editors can autocomplete
+            def later():
+                try:
+                    self.refresh_macros(quiet=True)
+                except Exception:
+                    pass
+
+            timer = threading.Timer(5.0, later)
+            timer.daemon = True
+            timer.start()
 
     # -------------------------------------------------------------- settings
 
@@ -209,6 +268,13 @@ class AutoPrintQueuePlugin(
     def get_template_configs(self):
         return [
             {"type": "tab", "name": "Print Queue", "custom_bindings": True},
+            {
+                "type": "sidebar",
+                "name": "Print Queue",
+                "icon": "list-ol",
+                "custom_bindings": True,
+                "template": "autoprintqueue_sidebar.jinja2",
+            },
             {"type": "settings", "name": "Auto Print Queue", "custom_bindings": False},
         ]
 
@@ -220,6 +286,7 @@ class AutoPrintQueuePlugin(
     def get_api_commands(self):
         return {
             "add": ["path"],
+            "add_node": [],
             "remove": ["id"],
             "update": ["id"],
             "move": ["id", "index"],
@@ -229,8 +296,12 @@ class AutoPrintQueuePlugin(
             "start": [],
             "stop": [],
             "approve": [],
-            "skip_delay": [],
             "set_approval": ["enabled"],
+            "library_add": [],
+            "library_update": ["id"],
+            "library_remove": ["id"],
+            "library_move": ["id", "index"],
+            "refresh_macros": [],
         }
 
     def on_api_get(self, request):
@@ -238,7 +309,7 @@ class AutoPrintQueuePlugin(
 
         if not _can("STATUS"):
             flask.abort(403)
-        return flask.jsonify(self._runner.snapshot())
+        return flask.jsonify(self._snapshot())
 
     def on_api_command(self, command, data):
         import flask
@@ -259,11 +330,20 @@ class AutoPrintQueuePlugin(
                     scheduled_at=data.get("scheduled_at"),
                     copies=data.get("copies", 1),
                     index=data.get("index"),
+                    auto_nodes=data.get("auto_nodes", True),
+                )
+            elif command == "add_node":
+                r.add_node(
+                    library_id=data.get("library_id"),
+                    name=data.get("name"),
+                    gcode=data.get("gcode"),
+                    index=data.get("index"),
+                    after_id=data.get("after_id"),
                 )
             elif command == "remove":
                 r.remove(data["id"])
             elif command == "update":
-                fields = {k: data[k] for k in ("enabled", "scheduled_at", "copies") if k in data}
+                fields = {k: data[k] for k in ("enabled", "scheduled_at", "copies", "name", "gcode") if k in data}
                 if r.update(data["id"], **fields) is None:
                     return flask.make_response("Unknown queue item", 404)
             elif command == "move":
@@ -280,16 +360,28 @@ class AutoPrintQueuePlugin(
                 r.stop_queue()
             elif command == "approve":
                 r.approve()
-            elif command == "skip_delay":
-                r.skip_delay()
             elif command == "set_approval":
                 self._settings.set_boolean(["require_approval"], bool(data["enabled"]))
                 self._settings.save()
                 r.tick()
+            elif command == "library_add":
+                r.library_add(
+                    name=data.get("name", ""), gcode=data.get("gcode", ""), auto_add=data.get("auto_add", False)
+                )
+            elif command == "library_update":
+                fields = {k: data[k] for k in ("name", "gcode", "auto_add") if k in data}
+                if r.library_update(data["id"], **fields) is None:
+                    return flask.make_response("Unknown library node", 404)
+            elif command == "library_remove":
+                r.library_remove(data["id"])
+            elif command == "library_move":
+                r.library_move(data["id"], data["index"])
+            elif command == "refresh_macros":
+                self.refresh_macros()
         except ValueError as exc:
             return flask.make_response(str(exc), 409)
         self._push_state()
-        return flask.jsonify(r.snapshot())
+        return flask.jsonify(self._snapshot())
 
     # --------------------------------------------------------- update hook
 
@@ -318,5 +410,6 @@ def __plugin_load__():
     global __plugin_hooks__
     __plugin_hooks__ = {
         "octoprint.comm.protocol.atcommand.sending": __plugin_implementation__.on_atcommand_sending,
+        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.on_gcode_received,
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
     }

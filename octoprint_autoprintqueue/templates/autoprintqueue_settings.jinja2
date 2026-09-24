@@ -11,31 +11,7 @@
                 <span class="help-block">After a print ends, the queue pauses and shows a "Bed is clear" button (and a popup). Pressing <em>Start queue</em> also counts as approval.</span>
             </div>
         </div>
-        <div class="control-group">
-            <div class="controls">
-                <label class="checkbox">
-                    <input type="checkbox" data-bind="checked: settings.plugins.autoprintqueue.between_enabled">
-                    Run G-code / macros between prints
-                </label>
-            </div>
-        </div>
-        <div class="control-group">
-            <label class="control-label">Between-prints G-code</label>
-            <div class="controls">
-                <textarea rows="6" class="input-block-level apq-code" data-bind="value: settings.plugins.autoprintqueue.between_gcode, enable: settings.plugins.autoprintqueue.between_enabled" placeholder="; e.g. park and wait for the bed to cool&#10;G28&#10;TEMPERATURE_WAIT SENSOR=heater_bed MAXIMUM=35"></textarea>
-                <span class="help-block">Sent after a print finishes, only when another queued print is waiting. One command or Klipper macro per line; <code>;</code> starts a comment. The queue waits until the printer has executed every line before it goes on.</span>
-            </div>
-        </div>
-        <div class="control-group">
-            <label class="control-label">Extra wait</label>
-            <div class="controls">
-                <div class="input-append">
-                    <input type="number" min="0" class="input-mini" data-bind="value: settings.plugins.autoprintqueue.delay_seconds">
-                    <span class="add-on">seconds</span>
-                </div>
-                <span class="help-block">Pause after the G-code above before the next print (or the approval prompt).</span>
-            </div>
-        </div>
+        <p class="help-block">G-code and macros between prints are now <strong>nodes</strong> in the queue. Add and manage them, and the node library, on the <em>Print Queue</em> tab.</p>
     </fieldset>
     <fieldset>
         <legend>When the queue is done</legend>
@@ -61,13 +37,13 @@
             </div>
         </div>
         <div class="control-group">
-            <label class="control-label">G-code timeout</label>
+            <label class="control-label">Node timeout</label>
             <div class="controls">
                 <div class="input-append">
                     <input type="number" min="10" class="input-mini" data-bind="value: settings.plugins.autoprintqueue.macro_timeout">
                     <span class="add-on">seconds</span>
                 </div>
-                <span class="help-block">Stop the queue if the between-prints G-code has not finished by then.</span>
+                <span class="help-block">Stop the queue if a node's G-code has not finished by then.</span>
             </div>
         </div>
         <div class="control-group">

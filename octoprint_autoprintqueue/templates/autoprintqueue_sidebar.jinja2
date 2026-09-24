@@ -1,0 +1,29 @@
+<div id="apq_sidebar" class="apq-side">
+    <div class="apq-side-status" data-bind="css: statusClass">
+        <span class="apq-dot"></span>
+        <strong data-bind="text: statusText"></strong>
+        <div class="apq-side-detail muted" data-bind="visible: statusDetail, text: statusDetail"></div>
+    </div>
+
+    <div class="apq-side-controls">
+        <button class="btn btn-small btn-success btn-block" data-bind="visible: state() == 'approval', click: approve, enable: canControl"><i class="fas fa-play"></i> Bed is clear, start next</button>
+        <div class="btn-group apq-side-buttons">
+            <button class="btn btn-small btn-primary" data-bind="visible: !running(), click: start, enable: canControl() && hasPending()"><i class="fas fa-play"></i> Start</button>
+            <button class="btn btn-small" data-bind="visible: running(), click: stop, enable: canControl"><i class="fas fa-stop"></i> Stop</button>
+            <button class="btn btn-small" data-bind="click: openTab" title="Open the Print Queue tab"><i class="fas fa-external-link-alt"></i> Manage</button>
+        </div>
+        <label class="checkbox apq-side-approval" title="After a print finishes, wait until you confirm the bed is clear">
+            <input type="checkbox" data-bind="checked: requireApproval, enable: canControl"> Approve between prints
+        </label>
+    </div>
+
+    <ul class="apq-side-list" data-bind="foreach: items, visible: items().length">
+        <li data-bind="css: rowClass">
+            <input type="checkbox" data-bind="checked: enabled, enable: $parent.canControl() && !isActive()" title="Enabled">
+            <i class="fas fa-fw" data-bind="css: isActive() ? 'fa-spinner fa-spin' : (isNode ? 'fa-code' : 'fa-print')"></i>
+            <span class="apq-side-name" data-bind="text: title, attr: {title: isNode ? gcode() : origin + ':' + path}"></span>
+            <span class="apq-side-state" data-bind="text: sideText"></span>
+        </li>
+    </ul>
+    <div class="muted apq-side-empty" data-bind="visible: !items().length">Queue is empty.</div>
+</div>

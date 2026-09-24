@@ -5,7 +5,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "octoprint_autoprintqueue"))
 
 import core  # noqa: E402  (imported without the OctoPrint package __init__)
-from core import QueueRunner, parse_script  # noqa: E402
+from core import QueueRunner, parse_help_line, parse_script  # noqa: E402
 
 
 class FakeHost(object):
@@ -47,7 +47,7 @@ class FakeHost(object):
 class Base(unittest.TestCase):
     def make(self, **settings):
         self.host = FakeHost()
-        base = {"require_approval": False, "between_gcode": ""}
+        base = {"require_approval": False}
         base.update(settings)
         self.settings = base
         self.r = QueueRunner(self.host, lambda: self.settings)
@@ -60,12 +60,20 @@ class Base(unittest.TestCase):
         self.r.on_print_ended("local", path, outcome, reason)
 
     def run_marker(self):
+        """Let the printer finish the node G-code that was sent last."""
         lines, token = self.host.scripts[-1]
         self.r.on_marker(token)
         return lines
 
+    def events(self):
+        """Prints started and node scripts sent, in order."""
+        return list(self.host.started)
 
-class ScriptTests(unittest.TestCase):
+    def statuses(self):
+        return [(i.title, i.status) for i in self.r.items]
+
+
+class ParserTests(unittest.TestCase):
     def test_parse_script_drops_comments_and_blanks(self):
         text = "; park\nG28 ; home\n\n  PARK_TOOLHEAD  \n;only comment\nM400"
         self.assertEqual(parse_script(text), ["G28", "PARK_TOOLHEAD", "M400"])
@@ -73,48 +81,105 @@ class ScriptTests(unittest.TestCase):
     def test_empty(self):
         self.assertEqual(parse_script(None), [])
 
+    def test_klipper_help_lines(self):
+        self.assertEqual(parse_help_line("// PARK: G-Code macro"), ("PARK", "G-Code macro"))
+        self.assertEqual(
+            parse_help_line("// BED_MESH_CALIBRATE : Perform Mesh Bed Leveling"),
+            ("BED_MESH_CALIBRATE", "Perform Mesh Bed Leveling"),
+        )
+        self.assertEqual(parse_help_line("//   g32: lower case"), ("G32", "lower case"))
+        self.assertIsNone(parse_help_line("// Available extended commands:"))
+        self.assertIsNone(parse_help_line("ok"))
+        self.assertIsNone(parse_help_line("echo: PARK: x"))
+
 
 class QueueFlowTests(Base):
-    def test_runs_queue_back_to_back_with_macro_between(self):
-        r = self.make(between_gcode="G28\nPARK", finished_enabled=True, finished_gcode="M84")
+    def test_nodes_run_between_prints_in_order(self):
+        r = self.make(finished_enabled=True, finished_gcode="M84")
         r.add("a.gcode")
+        r.add_node(gcode="PARK")
+        r.add_node(gcode="G4 S5\nCLEAN_NOZZLE")
         r.add("b.gcode")
-        self.assertEqual(self.host.started, [])  # nothing starts until the queue runs
+        self.assertEqual(self.host.started, [])  # nothing runs until the queue is started
         r.start_queue()
         self.assertEqual(self.host.started, ["a.gcode"])
-        self.assertEqual(r.state, core.STARTING)
 
         self.finish("a.gcode")
         self.assertEqual(r.state, core.MACRO)
-        self.assertEqual(self.host.started, ["a.gcode"])  # waits for the macro
-        self.assertEqual(self.run_marker(), ["G28", "PARK"])
+        self.assertEqual(self.run_marker(), ["PARK"])
+        self.assertEqual(r.state, core.MACRO)
+        self.assertEqual(self.run_marker(), ["G4 S5", "CLEAN_NOZZLE"])
         self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
 
         self.finish("b.gcode")
         self.assertFalse(r.running)
-        self.assertEqual(r.state, core.IDLE)
         self.assertEqual(self.host.scripts[-1], (["M84"], None))
-        self.assertEqual([i.status for i in r.items], ["done", "done"])
+        self.assertEqual([s for _, s in self.statuses()], ["done"] * 4)
 
-    def test_wrong_marker_is_ignored(self):
-        r = self.make(between_gcode="G28")
+    def test_node_waits_for_marker_before_next_print(self):
+        r = self.make()
         r.add("a.gcode")
+        n = r.add_node(gcode="PARK")
         r.add("b.gcode")
         r.start_queue()
         self.finish("a.gcode")
+        self.assertEqual(n.status, core.RUNNING)
         r.on_marker("not-the-token")
-        self.assertEqual(r.state, core.MACRO)
+        r.tick()
+        self.assertEqual(self.host.started, ["a.gcode"])
+        self.run_marker()
+        self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
 
-    def test_between_macro_can_be_disabled(self):
-        r = self.make(between_gcode="G28", between_enabled=False)
+    def test_disabled_node_is_skipped(self):
+        r = self.make()
         r.add("a.gcode")
+        n = r.add_node(gcode="PARK")
         r.add("b.gcode")
+        r.update(n.id, enabled=False)
         r.start_queue()
         self.finish("a.gcode")
         self.assertEqual(self.host.scripts, [])
         self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
+        self.assertEqual(n.status, core.PENDING)
 
-    def test_disabled_items_are_skipped(self):
+    def test_empty_node_passes_straight_through(self):
+        r = self.make()
+        r.add("a.gcode")
+        r.add_node(gcode="; just a comment")
+        r.add("b.gcode")
+        r.start_queue()
+        self.finish("a.gcode")
+        self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
+
+    def test_leading_node_runs_before_first_print(self):
+        r = self.make()
+        r.add_node(gcode="PREHEAT")
+        r.add("a.gcode")
+        r.start_queue()
+        self.assertEqual(self.host.started, [])
+        self.assertEqual(self.run_marker(), ["PREHEAT"])
+        self.assertEqual(self.host.started, ["a.gcode"])
+
+    def test_trailing_node_runs_after_last_print(self):
+        r = self.make()
+        r.add("a.gcode")
+        r.add_node(gcode="COOLDOWN")
+        r.start_queue()
+        self.finish("a.gcode")
+        self.assertEqual(self.run_marker(), ["COOLDOWN"])
+        self.assertFalse(r.running)
+
+    def test_node_waits_for_idle_printer(self):
+        r = self.make()
+        r.add_node(gcode="PARK")
+        self.host.idle = False
+        r.start_queue()
+        self.assertEqual(self.host.scripts, [])
+        self.host.idle = True
+        r.tick()
+        self.assertEqual(self.host.scripts[-1][0], ["PARK"])
+
+    def test_disabled_prints_are_skipped(self):
         r = self.make()
         a = r.add("a.gcode")
         r.add("b.gcode")
@@ -122,51 +187,104 @@ class QueueFlowTests(Base):
         r.start_queue()
         self.assertEqual(self.host.started, ["b.gcode"])
         self.finish("b.gcode")
-        self.assertFalse(r.running)  # only a disabled item left
+        self.assertFalse(r.running)
         self.assertEqual(a.status, "pending")
 
-    def test_waits_for_printer_to_be_idle(self):
+    def test_copies_repeat_the_nodes_after_the_print(self):
         r = self.make()
-        r.add("a.gcode")
-        self.host.idle = False
-        r.start_queue()
-        self.assertEqual(self.host.started, [])
-        self.host.idle = True
-        r.tick()
-        self.assertEqual(self.host.started, ["a.gcode"])
-
-    def test_copies(self):
-        r = self.make()
-        r.add("a.gcode", copies=2)
+        a = r.add("a.gcode", copies=3)
+        n = r.add_node(gcode="EJECT")
+        r.add("b.gcode")
         r.start_queue()
         self.finish("a.gcode")
+        self.assertEqual(self.run_marker(), ["EJECT"])
+        self.assertEqual(n.status, core.PENDING)  # still owed after the last copy
         self.assertEqual(self.host.started, ["a.gcode", "a.gcode"])
         self.finish("a.gcode")
-        self.assertEqual(r.items[0].status, "done")
-        self.assertEqual(r.items[0].completed, 2)
+        self.run_marker()
+        self.finish("a.gcode")
+        self.assertEqual(a.status, core.DONE)
+        self.assertEqual(self.run_marker(), ["EJECT"])
+        self.assertEqual(n.status, core.DONE)
+        self.assertEqual(self.host.started, ["a.gcode"] * 3 + ["b.gcode"])
+        self.assertEqual(len(self.host.scripts), 3)
 
-    def test_delay_between_prints(self):
-        r = self.make(delay_seconds=30)
+    def test_node_edit_changes_what_is_sent(self):
+        r = self.make()
         r.add("a.gcode")
+        n = r.add_node(gcode="OLD")
         r.add("b.gcode")
+        r.update(n.id, gcode="NEW_MACRO", name="Swap")
+        self.assertEqual(n.title, "Swap")
         r.start_queue()
         self.finish("a.gcode")
-        self.assertEqual(r.state, core.DELAY)
-        self.host.t += 10
-        r.tick()
-        self.assertEqual(self.host.started, ["a.gcode"])
-        self.host.t += 25
-        r.tick()
-        self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
+        self.assertEqual(self.run_marker(), ["NEW_MACRO"])
 
-    def test_skip_delay(self):
-        r = self.make(delay_seconds=300)
-        r.add("a.gcode")
+    def test_insert_node_after_entry(self):
+        r = self.make()
+        a = r.add("a.gcode")
         r.add("b.gcode")
-        r.start_queue()
-        self.finish("a.gcode")
-        r.skip_delay()
-        self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
+        n = r.add_node(gcode="PARK", after_id=a.id)
+        self.assertEqual([i.id for i in r.items][1], n.id)
+
+    def test_run_node_now(self):
+        r = self.make()
+        n = r.add_node(gcode="PARK")
+        r.print_now(n.id)
+        self.assertEqual(self.run_marker(), ["PARK"])
+        self.assertEqual(n.status, core.DONE)
+        self.assertEqual(r.state, core.IDLE)
+
+
+class LibraryTests(Base):
+    def test_auto_add_nodes_go_between_prints(self):
+        r = self.make()
+        r.library_add(name="Eject", gcode="EJECT", auto_add=True)
+        r.library_add(name="Unused", gcode="X", auto_add=False)
+        r.library_add(name="Wipe", gcode="WIPE", auto_add=True)
+        r.add("a.gcode")  # first print: nothing to separate yet
+        r.add("b.gcode")
+        r.add("c.gcode")
+        self.assertEqual(
+            [i.title for i in r.items],
+            ["a.gcode", "Eject", "Wipe", "b.gcode", "Eject", "Wipe", "c.gcode"],
+        )
+        self.assertEqual(r.items[1].library_id, r.library[0].id)
+
+    def test_add_without_auto_nodes(self):
+        r = self.make()
+        r.library_add(name="Eject", gcode="EJECT", auto_add=True)
+        r.add("a.gcode")
+        r.add("b.gcode", auto_nodes=False)
+        self.assertEqual([i.title for i in r.items], ["a.gcode", "b.gcode"])
+
+    def test_library_node_into_queue_is_a_copy(self):
+        r = self.make()
+        lib = r.library_add(name="Park", gcode="PARK")
+        entry = r.add_node(library_id=lib.id)
+        r.library_update(lib.id, gcode="PARK_V2")
+        self.assertEqual(entry.gcode, "PARK")
+        self.assertEqual(entry.title, "Park")
+
+    def test_blank_node_title_comes_from_its_gcode(self):
+        r = self.make()
+        entry = r.add_node()
+        self.assertEqual(entry.title, "Empty node")
+        r.update(entry.id, gcode="BLOBIFIER_CLEAN\nPARK")
+        self.assertEqual(entry.title, "BLOBIFIER_CLEAN …")
+
+    def test_library_crud(self):
+        r = self.make()
+        a = r.library_add(name="A")
+        b = r.library_add(name="B")
+        r.library_move(b.id, 0)
+        self.assertEqual([n.name for n in r.library], ["B", "A"])
+        r.library_update(a.id, auto_add=True)
+        self.assertTrue(a.auto_add)
+        r.library_remove(b.id)
+        self.assertEqual([n.name for n in r.library], ["A"])
+        with self.assertRaises(ValueError):
+            r.add_node(library_id="missing")
 
 
 class ApprovalTests(Base):
@@ -185,9 +303,10 @@ class ApprovalTests(Base):
         r.approve()
         self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
 
-    def test_macro_runs_before_approval(self):
-        r = self.make(require_approval=True, between_gcode="PARK")
+    def test_nodes_run_before_approval(self):
+        r = self.make(require_approval=True)
         r.add("a.gcode")
+        r.add_node(gcode="PARK")
         r.add("b.gcode")
         r.start_queue()
         self.finish("a.gcode")
@@ -208,6 +327,16 @@ class ApprovalTests(Base):
         r.approve()
         self.assertEqual(self.host.started[-1], "c.gcode")
 
+    def test_node_moved_ahead_runs_before_approval(self):
+        r = self.make(require_approval=True)
+        r.add("a.gcode")
+        r.add("b.gcode")
+        r.start_queue()
+        self.finish("a.gcode")
+        self.assertEqual(r.state, core.APPROVAL)
+        r.add_node(gcode="PARK", index=1)
+        self.assertEqual(r.state, core.MACRO)
+
     def test_turning_approval_off_while_waiting_starts_next(self):
         r = self.make(require_approval=True)
         r.add("a.gcode")
@@ -215,7 +344,7 @@ class ApprovalTests(Base):
         r.start_queue()
         self.finish("a.gcode")
         self.settings["require_approval"] = False
-        r.tick()  # still waiting: bed flagged as needing a clear, re-check picks it up
+        r.tick()
         self.assertEqual(self.host.started, ["a.gcode", "b.gcode"])
 
     def test_restart_after_stop_needs_no_approval(self):
@@ -242,17 +371,27 @@ class ScheduleTests(Base):
         r.tick()
         self.assertEqual(self.host.started, ["a.gcode"])
 
-    def test_due_items_run_before_a_future_one(self):
+    def test_queue_runs_in_order_so_a_scheduled_print_holds_the_rest(self):
         r = self.make()
         r.add("later.gcode", scheduled_at=self.host.t + 3600)
-        r.add("now.gcode")
+        r.add("after.gcode")
         r.start_queue()
-        self.assertEqual(self.host.started, ["now.gcode"])
-        self.finish("now.gcode")
-        self.assertTrue(r.running)  # still waiting for the scheduled one
-        self.host.t += 4000
+        self.assertEqual(self.host.started, [])
+        self.host.t += 3601
         r.tick()
-        self.assertEqual(self.host.started, ["now.gcode", "later.gcode"])
+        self.finish("later.gcode")
+        self.assertEqual(self.host.started, ["later.gcode", "after.gcode"])
+
+    def test_nodes_before_a_scheduled_print_run_right_away(self):
+        r = self.make()
+        r.add("a.gcode")
+        r.add_node(gcode="COOLDOWN")
+        r.add("b.gcode", scheduled_at=self.host.t + 3600)
+        r.start_queue()
+        self.finish("a.gcode")
+        self.assertEqual(self.run_marker(), ["COOLDOWN"])
+        self.assertEqual(r.state, core.WAITING)
+        self.assertEqual(self.host.started, ["a.gcode"])
 
     def test_clearing_schedule_means_immediately(self):
         r = self.make()
@@ -273,12 +412,13 @@ class FailureTests(Base):
     def test_failure_pauses_queue(self):
         r = self.make()
         r.add("a.gcode")
+        r.add_node(gcode="PARK")
         r.add("b.gcode")
         r.start_queue()
         self.finish("a.gcode", "failed", "error")
         self.assertFalse(r.running)
         self.assertEqual(r.items[0].status, "failed")
-        self.assertEqual(self.host.started, ["a.gcode"])
+        self.assertEqual(self.host.scripts, [])
 
     def test_cancel_can_continue(self):
         r = self.make(on_failure="continue")
@@ -318,15 +458,17 @@ class FailureTests(Base):
         self.assertFalse(r.running)
         self.assertEqual(r.items[0].status, "failed")
 
-    def test_macro_timeout_pauses(self):
-        r = self.make(between_gcode="WAIT_FOREVER", macro_timeout=60)
+    def test_node_timeout_pauses(self):
+        r = self.make(macro_timeout=60)
         r.add("a.gcode")
+        n = r.add_node(gcode="WAIT_FOREVER")
         r.add("b.gcode")
         r.start_queue()
         self.finish("a.gcode")
         self.host.t += 61
         r.tick()
         self.assertFalse(r.running)
+        self.assertEqual(n.status, core.FAILED)
         self.assertEqual(self.host.started, ["a.gcode"])
 
     def test_requeue(self):
@@ -357,27 +499,55 @@ class ManualPrintTests(Base):
     def test_stop_lets_current_print_finish_but_starts_nothing(self):
         r = self.make()
         r.add("a.gcode")
+        r.add_node(gcode="PARK")
         r.add("b.gcode")
         r.start_queue()
         r.stop_queue()
         self.finish("a.gcode")
         self.assertEqual(r.items[0].status, "done")
-        self.assertEqual(self.host.started, ["a.gcode"])
+        self.assertEqual(self.host.scripts, [])
         self.assertEqual(r.state, core.IDLE)
 
-    def test_cannot_remove_printing_item(self):
+    def test_stop_during_node_lets_it_finish(self):
+        r = self.make()
+        r.add("a.gcode")
+        n = r.add_node(gcode="PARK")
+        r.add("b.gcode")
+        r.start_queue()
+        self.finish("a.gcode")
+        r.stop_queue()
+        self.run_marker()
+        self.assertEqual(n.status, core.DONE)
+        self.assertEqual(r.state, core.IDLE)
+        self.assertEqual(self.host.started, ["a.gcode"])
+
+    def test_cannot_remove_running_entries(self):
         r = self.make()
         a = r.add("a.gcode")
+        n = r.add_node(gcode="PARK")
+        r.add("b.gcode")
         r.start_queue()
         with self.assertRaises(ValueError):
             r.remove(a.id)
+        self.finish("a.gcode")
+        with self.assertRaises(ValueError):
+            r.remove(n.id)
 
     def test_persistent_state_round_trip(self):
         r = self.make()
         r.add("a.gcode", scheduled_at=5000, copies=3)
+        r.add_node(name="Park", gcode="PARK")
+        r.library_add(name="Eject", gcode="EJECT", auto_add=True)
         data = r.persistent_state()
         items = [core.QueueItem.from_dict(d) for d in data["items"]]
-        self.assertEqual(items[0].to_dict(), r.items[0].to_dict())
+        self.assertEqual([i.to_dict() for i in items], [i.to_dict() for i in r.items])
+        lib = [core.LibraryNode.from_dict(d) for d in data["library"]]
+        self.assertEqual(lib[0].to_dict(), r.library[0].to_dict())
+
+    def test_v1_state_without_type_loads_as_print(self):
+        item = core.QueueItem.from_dict({"id": "x", "path": "a.gcode", "status": "pending"})
+        self.assertFalse(item.is_node)
+        self.assertEqual(item.title, "a.gcode")
 
 
 if __name__ == "__main__":

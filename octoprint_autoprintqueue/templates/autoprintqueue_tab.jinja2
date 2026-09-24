@@ -1,4 +1,23 @@
+<script type="text/html" id="apq-node-editor">
+    <div class="apq-editor">
+        <input type="text" class="input-block-level" placeholder="Name (optional)" data-bind="value: name">
+        <textarea rows="3" class="input-block-level apq-code" placeholder="One macro or G-code command per line, e.g. PARK" data-bind="value: gcode, valueUpdate: 'input'"></textarea>
+        <div class="apq-editor-macro input-append">
+            <input type="text" list="apq-macros" placeholder="Type a printer macro…" data-bind="value: macro, valueUpdate: 'input', event: {keydown: macroKey}">
+            <button class="btn" data-bind="click: insertMacro, enable: macro" title="Add this macro as a new line"><i class="fas fa-plus"></i></button>
+        </div>
+        <div class="apq-editor-actions">
+            <button class="btn btn-mini btn-primary" data-bind="click: save">Save</button>
+            <button class="btn btn-mini btn-link" data-bind="click: cancel">Cancel</button>
+        </div>
+    </div>
+</script>
+
 <div id="apq" class="apq">
+    <datalist id="apq-macros" data-bind="foreach: macros">
+        <option data-bind="value: name, text: description"></option>
+    </datalist>
+
     <div class="apq-status" data-bind="css: statusClass">
         <div class="apq-status-main">
             <span class="apq-dot"></span>
@@ -22,27 +41,39 @@
         <div class="btn-group">
             <button class="btn btn-primary" data-bind="visible: !running(), click: start, enable: canControl() && hasPending()"><i class="fas fa-play"></i> Start queue</button>
             <button class="btn" data-bind="visible: running(), click: stop, enable: canControl"><i class="fas fa-stop"></i> Stop queue</button>
-            <button class="btn" data-bind="visible: state() == 'delay', click: skipDelay, enable: canControl"><i class="fas fa-forward"></i> Skip wait</button>
         </div>
         <label class="checkbox apq-approval-toggle" title="After a print finishes, wait until you confirm the bed is clear before starting the next one">
             <input type="checkbox" data-bind="checked: requireApproval, enable: canControl"> Wait for my approval between prints
         </label>
-        <button class="btn btn-small pull-right" data-bind="click: clearFinished, enable: canControl() && hasFinished()" title="Remove done, failed and cancelled prints from the list"><i class="fas fa-broom"></i> Clear finished</button>
+        <button class="btn btn-small pull-right" data-bind="click: clearFinished, enable: canControl() && hasFinished()" title="Remove done, failed and cancelled entries from the list"><i class="fas fa-broom"></i> Clear finished</button>
     </div>
 
-    <form class="apq-add form-inline" data-bind="submit: addSelected">
-        <select data-bind="options: availableFiles, optionsText: 'label', optionsValue: 'key', value: fileToAdd, optionsCaption: 'Add a file to the queue…'" class="apq-file-select"></select>
-        <button type="submit" class="btn" data-bind="enable: fileToAdd() && canControl()"><i class="fas fa-plus"></i> Add</button>
-        <button type="button" class="btn btn-link" data-bind="click: refreshFiles" title="Reload the file list"><i class="fas fa-sync"></i></button>
-        <span class="help-inline muted">Tip: use the <i class="fas fa-list-ol"></i> button next to any file in the Files panel.</span>
-    </form>
+    <div class="apq-add">
+        <form class="form-inline" data-bind="submit: addSelected">
+            <select data-bind="options: availableFiles, optionsText: 'label', optionsValue: 'key', value: fileToAdd, optionsCaption: 'Add a print…'" class="apq-add-select"></select>
+            <button type="submit" class="btn" data-bind="enable: fileToAdd() && canControl()"><i class="fas fa-print"></i> Add print</button>
+            <button type="button" class="btn btn-link" data-bind="click: refreshFiles" title="Reload the file list"><i class="fas fa-sync"></i></button>
+            <span class="help-inline muted" data-bind="visible: autoAddCount() > 0">
+                + <span data-bind="text: autoAddCount"></span> auto node(s) between prints
+            </span>
+        </form>
+        <form class="form-inline" data-bind="submit: addNode">
+            <select data-bind="options: nodeChoices, optionsText: 'label', optionsValue: 'value', value: nodeToAdd" class="apq-add-select"></select>
+            <button type="submit" class="btn" data-bind="enable: canControl"><i class="fas fa-code"></i> Add node</button>
+            <span class="label label-info apq-insert-chip" data-bind="visible: insertAfter">
+                after #<span data-bind="text: insertAfter() ? items.indexOf(insertAfter()) + 1 : ''"></span>
+                <a href="#" data-bind="click: clearInsertAfter" title="Add at the end instead">&times;</a>
+            </span>
+            <span class="help-inline muted" data-bind="visible: !insertAfter()">at the end · use <i class="fas fa-level-down-alt"></i> on a row to insert after it</span>
+        </form>
+    </div>
 
     <div class="apq-table-wrap" data-bind="visible: items().length">
     <table class="table table-condensed apq-table">
         <thead>
             <tr>
-                <th class="apq-col-on" title="Enabled prints run; disabled prints are skipped until re-enabled">On</th>
-                <th>File</th>
+                <th class="apq-col-on" title="Enabled entries run; disabled ones are skipped">On</th>
+                <th>Entry</th>
                 <th class="apq-col-copies" title="How many times to print it">Copies</th>
                 <th class="apq-col-when">Start</th>
                 <th class="apq-col-status">Status</th>
@@ -51,15 +82,28 @@
         </thead>
         <tbody data-bind="foreach: items">
             <tr data-bind="css: rowClass">
-                <td class="apq-col-on"><input type="checkbox" data-bind="checked: enabled, enable: $parent.canControl() && status() != 'printing'"></td>
-                <td class="apq-name">
+                <td class="apq-col-on"><input type="checkbox" data-bind="checked: enabled, enable: $parent.canControl() && !isActive()"></td>
+                <td class="apq-name" data-bind="attr: {colspan: isNode ? 3 : 1}">
                     <span class="apq-pos" data-bind="text: ($index() + 1) + '.'"></span>
-                    <span data-bind="text: name, attr: {title: origin + ':' + path}"></span>
-                    <span class="label" data-bind="visible: origin == 'sdcard'">SD</span>
-                    <span class="label label-info" data-bind="visible: isNext">next</span>
+                    <i class="fas fa-fw" data-bind="css: isNode ? 'fa-code' : 'fa-print', attr: {title: isNode ? 'Node' : 'Print'}"></i>
+                    <!-- ko ifnot: editor -->
+                        <!-- ko if: isNode -->
+                            <a href="#" class="apq-node-title" data-bind="text: title, click: editNode" title="Click to edit this node"></a>
+                            <code class="apq-node-code" data-bind="visible: summary, text: summary"></code>
+                        <!-- /ko -->
+                        <!-- ko ifnot: isNode -->
+                            <span data-bind="text: title, attr: {title: origin + ':' + path}"></span>
+                            <span class="label" data-bind="visible: origin == 'sdcard'">SD</span>
+                        <!-- /ko -->
+                        <span class="label label-info" data-bind="visible: isNext">next</span>
+                    <!-- /ko -->
+                    <!-- ko with: editor -->
+                        <div data-bind="template: {name: 'apq-node-editor'}"></div>
+                    <!-- /ko -->
                 </td>
+                <!-- ko ifnot: isNode -->
                 <td class="apq-col-copies">
-                    <input type="number" min="1" class="input-mini" data-bind="value: copies, enable: $parent.canControl() && status() != 'printing'">
+                    <input type="number" min="1" class="input-mini" data-bind="value: copies, enable: $parent.canControl() && !isActive()">
                 </td>
                 <td class="apq-col-when">
                     <div data-bind="visible: !editingSchedule()">
@@ -73,19 +117,78 @@
                         <button class="btn btn-mini btn-link" data-bind="click: cancelSchedule">Cancel</button>
                     </div>
                 </td>
+                <!-- /ko -->
                 <td class="apq-col-status"><span data-bind="text: statusText, attr: {title: result() || ''}"></span></td>
                 <td class="apq-col-actions">
                     <div class="btn-group">
                         <button class="btn btn-mini" data-bind="click: $parent.moveUp, enable: $parent.canControl() && $index() > 0" title="Move up"><i class="fas fa-arrow-up"></i></button>
                         <button class="btn btn-mini" data-bind="click: $parent.moveDown, enable: $parent.canControl() && $index() < $parent.items().length - 1" title="Move down"><i class="fas fa-arrow-down"></i></button>
-                        <button class="btn btn-mini" data-bind="click: $parent.printNow, enable: $parent.canPrintNow" title="Print this now (ignores schedule and approval)"><i class="fas fa-print"></i></button>
-                        <button class="btn btn-mini" data-bind="visible: status() != 'pending' && status() != 'printing', click: $parent.requeue, enable: $parent.canControl" title="Put back in the queue"><i class="fas fa-redo"></i></button>
-                        <button class="btn btn-mini btn-danger" data-bind="click: $parent.remove, enable: $parent.canControl() && status() != 'printing'" title="Remove from queue"><i class="far fa-trash-alt"></i></button>
+                        <button class="btn btn-mini" data-bind="click: $parent.chooseInsertAfter, enable: $parent.canControl, css: {active: $parent.insertAfter() === $data}" title="Insert the next node after this entry"><i class="fas fa-level-down-alt"></i></button>
+                        <button class="btn btn-mini" data-bind="visible: isNode, click: $parent.saveQueueNodeToLibrary, enable: $parent.canControl" title="Save this node to the library"><i class="fas fa-book"></i></button>
+                        <button class="btn btn-mini" data-bind="click: $parent.printNow, enable: $parent.canPrintNow, attr: {title: isNode ? 'Run this node now' : 'Print this now (ignores schedule and approval)'}"><i class="fas" data-bind="css: isNode ? 'fa-play' : 'fa-print'"></i></button>
+                        <button class="btn btn-mini" data-bind="visible: status() != 'pending' && !isActive(), click: $parent.requeue, enable: $parent.canControl" title="Put back in the queue"><i class="fas fa-redo"></i></button>
+                        <button class="btn btn-mini btn-danger" data-bind="click: $parent.remove, enable: $parent.canControl() && !isActive()" title="Remove from queue"><i class="far fa-trash-alt"></i></button>
                     </div>
                 </td>
             </tr>
         </tbody>
     </table>
     </div>
-    <p class="muted apq-empty" data-bind="visible: !items().length">The queue is empty. Add a file above or from the Files panel.</p>
+    <p class="muted apq-empty" data-bind="visible: !items().length">The queue is empty. Add a print above or from the Files panel.</p>
+
+    <div class="apq-library">
+        <h4 class="apq-library-head">
+            <a href="#" data-bind="click: toggleLibrary">
+                <i class="fas fa-fw" data-bind="css: libraryOpen() ? 'fa-caret-down' : 'fa-caret-right'"></i>
+                Node library <span class="muted" data-bind="text: '(' + library().length + ')'"></span>
+            </a>
+        </h4>
+        <div data-bind="visible: libraryOpen">
+            <p class="muted">Save the macros you run between prints. <strong>Auto</strong> nodes are inserted
+                between prints automatically whenever you add a print to the queue.</p>
+            <table class="table table-condensed apq-lib-table" data-bind="visible: library().length">
+                <thead>
+                    <tr>
+                        <th class="apq-col-on" title="Add automatically between prints">Auto</th>
+                        <th>Node</th>
+                        <th class="apq-col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody data-bind="foreach: library">
+                    <tr>
+                        <td class="apq-col-on"><input type="checkbox" data-bind="checked: autoAdd, enable: $parent.canControl"></td>
+                        <td class="apq-name">
+                            <!-- ko ifnot: editor -->
+                                <a href="#" class="apq-node-title" data-bind="text: title, click: edit" title="Click to edit"></a>
+                                <code class="apq-node-code" data-bind="text: summary"></code>
+                            <!-- /ko -->
+                            <!-- ko with: editor -->
+                                <div data-bind="template: {name: 'apq-node-editor'}"></div>
+                            <!-- /ko -->
+                        </td>
+                        <td class="apq-col-actions">
+                            <div class="btn-group">
+                                <button class="btn btn-mini" data-bind="click: $parent.libraryToQueue, enable: $parent.canControl" title="Add to the queue"><i class="fas fa-plus"></i> Queue</button>
+                                <button class="btn btn-mini" data-bind="click: $parent.libraryUp, enable: $parent.canControl() && $index() > 0" title="Move up"><i class="fas fa-arrow-up"></i></button>
+                                <button class="btn btn-mini" data-bind="click: $parent.libraryDown, enable: $parent.canControl() && $index() < $parent.library().length - 1" title="Move down"><i class="fas fa-arrow-down"></i></button>
+                                <button class="btn btn-mini btn-danger" data-bind="click: $parent.libraryRemove, enable: $parent.canControl" title="Delete from library"><i class="far fa-trash-alt"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- ko with: newLibraryEditor -->
+                <div class="apq-new-lib" data-bind="template: {name: 'apq-node-editor'}"></div>
+            <!-- /ko -->
+            <div class="apq-lib-footer">
+                <button class="btn btn-small" data-bind="click: newLibraryNode, enable: canControl() && !newLibraryEditor()"><i class="fas fa-plus"></i> New library node</button>
+                <span class="muted apq-macro-info">
+                    <span data-bind="text: macros().length ? macros().length + ' printer macros available for autocomplete' : 'No printer macros loaded yet'"></span>
+                    <button class="btn btn-mini btn-link" data-bind="click: loadMacros, enable: canControl() && !macrosLoading()">
+                        <i class="fas fa-sync" data-bind="css: {'fa-spin': macrosLoading}"></i> Load from printer
+                    </button>
+                </span>
+            </div>
+        </div>
+    </div>
 </div>

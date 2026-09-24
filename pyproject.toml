@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "OctoPrint-AutoPrintQueue"
-version = "0.1.0"
+version = "0.2.0"
 description = "Print queue for OctoPrint: starts the next job when the current one finishes, with between-print macros, scheduling and optional bed-clear approval"
 readme = "README.md"
 requires-python = ">=3.7"
