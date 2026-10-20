@@ -20,7 +20,12 @@
     <ul class="apq-side-list" data-bind="foreach: items, visible: items().length">
         <li data-bind="css: rowClass">
             <input type="checkbox" data-bind="checked: enabled, enable: $parent.canControl() && !isActive()" title="Enabled">
-            <i class="fas fa-fw" data-bind="css: isActive() ? 'fa-spinner fa-spin' : (isNode ? 'fa-code' : 'fa-print')"></i>
+            <!-- ko if: thumbUrl -->
+                <img class="apq-thumb apq-thumb-small" data-bind="attr: {src: thumbUrl}, click: $parent.showFirstLayer, event: {error: thumbError}" title="Show its first layer in the Queue Preview panel" alt="">
+            <!-- /ko -->
+            <!-- ko ifnot: thumbUrl -->
+                <i data-bind="attr: {class: 'fas fa-fw ' + (isActive() ? 'fa-spinner fa-spin' : (isNode ? 'fa-code' : 'fa-print apq-clickable'))}, click: $parent.showFirstLayer"></i>
+            <!-- /ko -->
             <span class="apq-side-name" data-bind="text: title, attr: {title: isNode ? gcode() : origin + ':' + path}"></span>
             <span class="apq-side-state" data-bind="text: sideText"></span>
         </li>

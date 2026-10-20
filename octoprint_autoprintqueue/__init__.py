@@ -1,4 +1,5 @@
 # coding=utf-8
+import hashlib
 import io
 import json
 import os
@@ -7,12 +8,16 @@ import time
 
 import octoprint.plugin
 
+from .firstlayer import parse_first_layer
 from .core import DEFAULT_SETTINGS, FAILED, PRINTING, RUNNING, LibraryNode, QueueItem, QueueRunner, parse_help_line
 
 MARKER = "autoprintqueue_done"
 STATE_FILE = "queue.json"
 MACROS_FILE = "macros.json"
 HELP_CAPTURE_SECONDS = 8
+FIRST_LAYER_DIR = "firstlayer"
+FIRST_LAYER_VERSION = 1  # bump when the parser output changes, so old cache entries are ignored
+FIRST_LAYER_CACHE_SIZE = 40
 
 
 def _can(permission_name):
@@ -41,6 +46,7 @@ class AutoPrintQueuePlugin(
         self._macros = []
         self._help_until = 0
         self._help_found = {}
+        self._first_layer_lock = threading.Lock()
 
     # ---------------------------------------------------------------- startup
 
@@ -164,6 +170,9 @@ class AutoPrintQueuePlugin(
 
     def _snapshot(self):
         data = self._runner.snapshot()
+        for item in data["items"]:
+            if item.get("type") == "print":
+                item.update(self._file_info(item.get("origin"), item.get("path")))
         data["macros"] = self._macros
         data["macros_loading"] = time.time() < self._help_until
         return data
@@ -172,6 +181,101 @@ class AutoPrintQueuePlugin(
         payload = {"type": "state"}
         payload.update(self._snapshot())
         self._plugin_manager.send_plugin_message(self._identifier, payload)
+
+    # ----------------------------------------- thumbnails and first layer
+
+    def _file_info(self, origin, path):
+        """Thumbnail URL and modification time of a queued print's file.
+
+        The thumbnail comes from the file's metadata, where slicer-thumbnail
+        plugins (Slicer Thumbnails, UltimakerFormatPackage, ...) store a URL
+        relative to OctoPrint's base URL, e.g.
+        "plugin/prusaslicerthumbnails/thumbnail/x.png?20261008164357".
+        """
+        info = {"thumbnail": None, "file_date": None}
+        if origin != "local" or not path:
+            return info
+        try:
+            info["thumbnail"] = (self._file_manager.get_metadata("local", path) or {}).get("thumbnail")
+            info["file_date"] = int(os.path.getmtime(self._file_manager.path_on_disk("local", path)))
+        except Exception:
+            pass  # file gone or unreadable: the UI falls back to the icon
+        return info
+
+    def _bed(self):
+        try:
+            volume = self._printer_profile_manager.get_current_or_default()["volume"]
+        except Exception:
+            volume = {}
+
+        def num(key, default):
+            try:
+                return float(volume.get(key, default))
+            except (TypeError, ValueError):
+                return float(default)
+
+        return {
+            "width": num("width", 200),
+            "depth": num("depth", 200),
+            "origin": volume.get("origin") or "lowerleft",
+            "form": volume.get("formFactor") or "rectangular",
+        }
+
+    def first_layer(self, item_id):
+        """First layer of a queued print's file, parsed once and cached on disk."""
+        item = self._runner.get(item_id)
+        if item is None or item.is_node:
+            raise LookupError("Unknown print")
+        if item.origin != "local":
+            raise LookupError("No preview for files on the printer's SD card")
+        try:
+            path_on_disk = self._file_manager.path_on_disk("local", item.path)
+            stat = os.stat(path_on_disk)
+        except Exception:
+            raise LookupError("File not found: " + item.path)
+
+        key = hashlib.sha1(
+            "{}|{}|{}|{}".format(item.path, stat.st_size, stat.st_mtime, FIRST_LAYER_VERSION).encode("utf-8")
+        ).hexdigest()
+        cache_dir = os.path.join(self.get_plugin_data_folder(), FIRST_LAYER_DIR)
+        cache_file = os.path.join(cache_dir, key + ".json")
+
+        with self._first_layer_lock:  # one parse at a time; a second request for the same file hits the cache
+            data = None
+            if os.path.exists(cache_file):
+                try:
+                    with io.open(cache_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    data = None
+            if data is None:
+                started = time.time()
+                with io.open(path_on_disk, "r", encoding="utf-8", errors="replace") as f:
+                    data = parse_first_layer(f)
+                self._logger.info(
+                    "First layer of %s: %d moves, %d lines read in %.2f s",
+                    item.path, data["segments"], data["lines_read"], time.time() - started,
+                )
+                try:
+                    if not os.path.isdir(cache_dir):
+                        os.makedirs(cache_dir)
+                    self._write_json(os.path.join(FIRST_LAYER_DIR, key + ".json"), data)
+                    self._prune_first_layer_cache(cache_dir)
+                except Exception:
+                    self._logger.exception("Could not cache the first layer of %s", item.path)
+
+        result = dict(data)
+        result.update({"id": item.id, "path": item.path, "bed": self._bed()})
+        return result
+
+    def _prune_first_layer_cache(self, cache_dir):
+        entries = [os.path.join(cache_dir, n) for n in os.listdir(cache_dir) if n.endswith(".json")]
+        entries.sort(key=os.path.getmtime, reverse=True)
+        for old in entries[FIRST_LAYER_CACHE_SIZE:]:
+            try:
+                os.remove(old)
+            except OSError:
+                pass
 
     # ------------------------------------------------ printer macro list
 
@@ -275,6 +379,14 @@ class AutoPrintQueuePlugin(
                 "custom_bindings": True,
                 "template": "autoprintqueue_sidebar.jinja2",
             },
+            {
+                "type": "sidebar",
+                "name": "Queue Preview",
+                "icon": "layer-group",
+                "custom_bindings": True,
+                "template": "autoprintqueue_preview.jinja2",
+                "suffix": "_preview",
+            },
             {"type": "settings", "name": "Auto Print Queue", "custom_bindings": False},
         ]
 
@@ -309,6 +421,16 @@ class AutoPrintQueuePlugin(
 
         if not _can("STATUS"):
             flask.abort(403)
+        item_id = request.args.get("first_layer")
+        if item_id:
+            if not _can("FILES_DOWNLOAD"):
+                flask.abort(403)
+            try:
+                # compact JSON: a full-bed first layer is ~200 KB this way, twice that pretty-printed
+                body = json.dumps(self.first_layer(item_id), separators=(",", ":"))
+                return flask.Response(body, mimetype="application/json")
+            except LookupError as exc:
+                return flask.make_response(str(exc), 404)
         return flask.jsonify(self._snapshot())
 
     def on_api_command(self, command, data):

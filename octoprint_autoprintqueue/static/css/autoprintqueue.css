@@ -204,3 +204,89 @@
 .apq-side-list li.apq-row-done { color: #aaa; }
 .apq-side-list li.apq-row-failed { color: #b94a48; }
 .apq-side-list li.apq-row-disabled .apq-side-name { text-decoration: line-through; color: #aaa; }
+
+/* slicer thumbnails in place of the print icon */
+.apq-thumb {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    vertical-align: middle;
+    border-radius: 3px;
+    background: rgba(128, 128, 128, 0.12);
+    cursor: pointer;
+    margin-right: 2px;
+}
+.apq-thumb-small {
+    width: 20px;
+    height: 20px;
+    flex: none;
+}
+.apq-clickable { cursor: pointer; }
+.apq-thumb:hover,
+.apq-row-previewed .apq-thumb {
+    outline: 2px solid #08c;
+    outline: 2px solid var(--accent, #08c);
+}
+.apq-row-previewed .apq-clickable {
+    color: #08c;
+    color: var(--accent, #08c);
+}
+
+/* Queue Preview panel: the first layer of a job on the bed */
+.apq-preview-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.apq-preview-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.apq-preview-pos {
+    font-size: 11px;
+    white-space: nowrap;
+}
+.apq-preview-wrap {
+    position: relative;
+    min-height: 60px;
+}
+.apq-preview-canvas {
+    display: block;
+}
+.apq-preview-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8px;
+    font-size: 12px;
+    color: #888;
+    pointer-events: none;
+}
+.apq-preview-info {
+    font-size: 11px;
+    margin-top: 4px;
+}
+.apq-tool-chip {
+    display: inline-block;
+    padding: 0 4px;
+    margin: 0 2px 2px 0;
+    border-radius: 3px;
+    color: #fff;
+    font-size: 10px;
+    line-height: 15px;
+}
+.apq-preview-mode {
+    font-size: 11px;
+    margin-top: 2px;
+}

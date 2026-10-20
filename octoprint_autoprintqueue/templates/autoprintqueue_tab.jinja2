@@ -85,7 +85,12 @@
                 <td class="apq-col-on"><input type="checkbox" data-bind="checked: enabled, enable: $parent.canControl() && !isActive()"></td>
                 <td class="apq-name" data-bind="attr: {colspan: isNode ? 3 : 1}">
                     <span class="apq-pos" data-bind="text: ($index() + 1) + '.'"></span>
-                    <i class="fas fa-fw" data-bind="css: isNode ? 'fa-code' : 'fa-print', attr: {title: isNode ? 'Node' : 'Print'}"></i>
+                    <!-- ko if: thumbUrl -->
+                        <img class="apq-thumb" data-bind="attr: {src: thumbUrl}, click: $parent.showFirstLayer, event: {error: thumbError}" title="Show its first layer in the Queue Preview panel" alt="">
+                    <!-- /ko -->
+                    <!-- ko ifnot: thumbUrl -->
+                        <i data-bind="attr: {class: 'fas fa-fw ' + (isNode ? 'fa-code' : 'fa-print apq-clickable'), title: isNode ? 'Node' : 'Show its first layer in the Queue Preview panel'}, click: $parent.showFirstLayer"></i>
+                    <!-- /ko -->
                     <!-- ko ifnot: editor -->
                         <!-- ko if: isNode -->
                             <a href="#" class="apq-node-title" data-bind="text: title, click: editNode" title="Click to edit this node"></a>

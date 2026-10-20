@@ -30,6 +30,16 @@ can also schedule prints for a set date and time, turn any entry on or off, and 
 - **Sidebar panel.** A compact "Print Queue" panel shows the live queue with start, stop and
   approve buttons and the on/off checkboxes. It is a normal OctoPrint sidebar panel, so the
   **UI Customizer** plugin can move it to any column.
+- **Slicer thumbnails.** Each print shows its slicer thumbnail instead of the printer icon, in
+  the tab and the sidebar. Thumbnails come from the file's metadata, where a thumbnail plugin
+  such as Slicer Thumbnails puts them. With no thumbnail the icon stays.
+- **Queue Preview panel.** A second sidebar panel draws a job's **first layer** on the bed, in
+  one colour per tool, so you can see what will go on the plate and where. By default it follows
+  the queue: the print running now, else the one waiting for approval, else the next one.
+  Clicking a thumbnail (or ◀ ▶) pins another job. The layer is read from the G-code up to the
+  second layer only, 0.06 s for a full-bed 350 mm plate, and cached. This works with Cura
+  (`;LAYER:`) and PrusaSlicer/OrcaSlicer (`;LAYER_CHANGE`); other slicers fall back to Z height.
+  The bed size comes from the printer profile.
 - **Add files from the Files panel.** Every G-code file gets a <kbd>☰</kbd> (list) button that
   adds it to the queue. The tab also has a picker covering every file, including subfolders.
 - Set **copies** per print. The nodes directly after a print run again between its copies.
@@ -116,7 +126,15 @@ that come back.
 ## API
 
 `GET /api/plugin/autoprintqueue` returns the queue, the library, the known printer macros and
-the runner state. `POST` accepts these commands:
+the runner state. Print entries also carry `thumbnail` (relative to OctoPrint's base URL, or
+null) and `file_date`.
+
+`GET /api/plugin/autoprintqueue?first_layer=<entry id>` returns that print's first layer:
+`z`, `tools` (`{"2": [[x0, y0, x1, y1, ...], ...]}`, polylines in mm per tool), `bounds`,
+`segments`, `method` (`marker`, `z` or `none`), `truncated`, plus `bed` (`width`, `depth`,
+`origin`, `form` from the printer profile). This also needs the FILES_DOWNLOAD permission.
+
+`POST` accepts these commands:
 
 - Queue: `add` (`path`, optional `origin`, `scheduled_at` as epoch seconds, `copies`, `index`,
   `auto_nodes`), `add_node` (`library_id`, or `name` + `gcode`; optional `index` or `after_id`),
