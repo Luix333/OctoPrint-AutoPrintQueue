@@ -33,13 +33,14 @@ can also schedule prints for a set date and time, turn any entry on or off, and 
 - **Slicer thumbnails.** Each print shows its slicer thumbnail instead of the printer icon, in
   the tab and the sidebar. Thumbnails come from the file's metadata, where a thumbnail plugin
   such as Slicer Thumbnails puts them. With no thumbnail the icon stays.
-- **Queue Preview panel.** A second sidebar panel draws a job's **first layer** on the bed, in
-  one colour per tool, so you can see what will go on the plate and where. By default it follows
-  the queue: the print running now, else the one waiting for approval, else the next one.
-  Clicking a thumbnail (or ◀ ▶) pins another job. The layer is read from the G-code up to the
-  second layer only, 0.06 s for a full-bed 350 mm plate, and cached. This works with Cura
-  (`;LAYER:`) and PrusaSlicer/OrcaSlicer (`;LAYER_CHANGE`); other slicers fall back to Z height.
-  The bed size comes from the printer profile.
+- **First-layer preview.** Under the queue in the same sidebar panel, a job's **first layer**
+  is drawn on the bed, in one colour per tool, so you can see what will go on the plate and
+  where. By default it follows the queue: the print running now, else the one waiting for
+  approval, else the next one. Clicking a thumbnail (or ◀ ▶) pins another job, and the
+  "First layer" header folds the preview away. The layer is read from the G-code up to the
+  second layer only, 0.06 s for a full-bed 350 mm plate (0.7 s on a Pi 4), and cached. This works
+  with Cura (`;LAYER:`) and PrusaSlicer/OrcaSlicer (`;LAYER_CHANGE`); other slicers fall back to
+  Z height. The bed size comes from the printer profile.
 - **Add files from the Files panel.** Every G-code file gets a <kbd>☰</kbd> (list) button that
   adds it to the queue. The tab also has a picker covering every file, including subfolders.
 - Set **copies** per print. The nodes directly after a print run again between its copies.

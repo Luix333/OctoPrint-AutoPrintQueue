@@ -379,14 +379,6 @@ class AutoPrintQueuePlugin(
                 "custom_bindings": True,
                 "template": "autoprintqueue_sidebar.jinja2",
             },
-            {
-                "type": "sidebar",
-                "name": "Queue Preview",
-                "icon": "layer-group",
-                "custom_bindings": True,
-                "template": "autoprintqueue_preview.jinja2",
-                "suffix": "_preview",
-            },
             {"type": "settings", "name": "Auto Print Queue", "custom_bindings": False},
         ]
 

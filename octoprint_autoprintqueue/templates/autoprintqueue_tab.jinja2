@@ -86,10 +86,10 @@
                 <td class="apq-name" data-bind="attr: {colspan: isNode ? 3 : 1}">
                     <span class="apq-pos" data-bind="text: ($index() + 1) + '.'"></span>
                     <!-- ko if: thumbUrl -->
-                        <img class="apq-thumb" data-bind="attr: {src: thumbUrl}, click: $parent.showFirstLayer, event: {error: thumbError}" title="Show its first layer in the Queue Preview panel" alt="">
+                        <img class="apq-thumb" data-bind="attr: {src: thumbUrl}, click: $parent.showFirstLayer, event: {error: thumbError}" title="Show its first layer in the Print Queue panel" alt="">
                     <!-- /ko -->
                     <!-- ko ifnot: thumbUrl -->
-                        <i data-bind="attr: {class: 'fas fa-fw ' + (isNode ? 'fa-code' : 'fa-print apq-clickable'), title: isNode ? 'Node' : 'Show its first layer in the Queue Preview panel'}, click: $parent.showFirstLayer"></i>
+                        <i data-bind="attr: {class: 'fas fa-fw ' + (isNode ? 'fa-code' : 'fa-print apq-clickable'), title: isNode ? 'Node' : 'Show its first layer in the Print Queue panel'}, click: $parent.showFirstLayer"></i>
                     <!-- /ko -->
                     <!-- ko ifnot: editor -->
                         <!-- ko if: isNode -->

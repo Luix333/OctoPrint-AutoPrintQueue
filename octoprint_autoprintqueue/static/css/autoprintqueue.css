@@ -232,7 +232,25 @@
     color: var(--accent, #08c);
 }
 
-/* Queue Preview panel: the first layer of a job on the bed */
+/* first-layer preview, under the queue in the sidebar panel */
+.apq-preview {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(128, 128, 128, 0.25);
+}
+.apq-preview-toggle {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: inherit;
+    text-decoration: none;
+}
+.apq-preview-toggle:hover,
+.apq-preview-toggle:focus {
+    color: inherit;
+    text-decoration: none;
+}
 .apq-preview-head {
     display: flex;
     align-items: center;

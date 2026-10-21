@@ -582,6 +582,21 @@ $(function () {
             self.previewPinned(null);
         };
 
+        // The preview sits under the queue in the sidebar panel and can be
+        // folded away; remembered per browser.
+        var PREVIEW_OPEN_KEY = "autoprintqueue.previewOpen";
+        var storedOpen = null;
+        try {
+            storedOpen = window.localStorage.getItem(PREVIEW_OPEN_KEY);
+        } catch (e) {}
+        self.previewOpen = ko.observable(storedOpen !== "0");
+        self.togglePreview = function () {
+            self.previewOpen(!self.previewOpen());
+            try {
+                window.localStorage.setItem(PREVIEW_OPEN_KEY, self.previewOpen() ? "1" : "0");
+            } catch (e) {}
+        };
+
         self.previewData = ko.observable(null);
         self.previewState = ko.observable("none"); // none | loading | ready | error
         self.previewError = ko.observable("");
@@ -1059,6 +1074,6 @@ $(function () {
     OCTOPRINT_VIEWMODELS.push({
         construct: AutoPrintQueueViewModel,
         dependencies: ["loginStateViewModel", "settingsViewModel", "filesViewModel", "accessViewModel"],
-        elements: ["#apq", "#apq_sidebar", "#apq_preview"]
+        elements: ["#apq", "#apq_sidebar"]
     });
 });

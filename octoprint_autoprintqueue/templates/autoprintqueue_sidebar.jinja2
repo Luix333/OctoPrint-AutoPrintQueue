@@ -21,7 +21,7 @@
         <li data-bind="css: rowClass">
             <input type="checkbox" data-bind="checked: enabled, enable: $parent.canControl() && !isActive()" title="Enabled">
             <!-- ko if: thumbUrl -->
-                <img class="apq-thumb apq-thumb-small" data-bind="attr: {src: thumbUrl}, click: $parent.showFirstLayer, event: {error: thumbError}" title="Show its first layer in the Queue Preview panel" alt="">
+                <img class="apq-thumb apq-thumb-small" data-bind="attr: {src: thumbUrl}, click: $parent.showFirstLayer, event: {error: thumbError}" title="Show its first layer below" alt="">
             <!-- /ko -->
             <!-- ko ifnot: thumbUrl -->
                 <i data-bind="attr: {class: 'fas fa-fw ' + (isActive() ? 'fa-spinner fa-spin' : (isNode ? 'fa-code' : 'fa-print apq-clickable'))}, click: $parent.showFirstLayer"></i>
@@ -31,4 +31,44 @@
         </li>
     </ul>
     <div class="muted apq-side-empty" data-bind="visible: !items().length">Queue is empty.</div>
+
+    <!-- first layer of a job on the bed -->
+    <div class="apq-preview" data-bind="visible: printItems().length">
+        <a href="#" class="apq-preview-toggle" data-bind="click: togglePreview">
+            <i class="fas fa-fw" data-bind="css: previewOpen() ? 'fa-caret-down' : 'fa-caret-right'"></i> First layer
+        </a>
+        <div data-bind="visible: previewOpen">
+            <div class="apq-preview-head">
+                <button class="btn btn-mini" data-bind="click: previewPrev, enable: previewIndex() > 0" title="Previous job"><i class="fas fa-chevron-left"></i></button>
+                <!-- ko with: previewItem -->
+                    <!-- ko if: thumbUrl -->
+                        <img class="apq-thumb apq-thumb-small" data-bind="attr: {src: thumbUrl}, event: {error: thumbError}" alt="">
+                    <!-- /ko -->
+                    <span class="apq-preview-title" data-bind="text: title, attr: {title: path}"></span>
+                    <span class="muted apq-preview-pos" data-bind="text: ($parent.previewIndex() + 1) + '/' + $parent.printItems().length"></span>
+                <!-- /ko -->
+                <button class="btn btn-mini" data-bind="click: previewNext, enable: previewIndex() < printItems().length - 1" title="Next job"><i class="fas fa-chevron-right"></i></button>
+            </div>
+
+            <div class="apq-preview-wrap">
+                <canvas class="apq-preview-canvas" data-bind="apqFirstLayer: previewData"></canvas>
+                <div class="apq-preview-overlay" data-bind="visible: previewMessage, text: previewMessage"></div>
+            </div>
+
+            <div class="apq-preview-info" data-bind="with: previewData">
+                <span data-bind="text: $parent.previewSummary"></span>
+                <!-- ko foreach: $parent.previewTools -->
+                    <span class="apq-tool-chip" data-bind="text: 'T' + tool, style: {background: color}"></span>
+                <!-- /ko -->
+            </div>
+
+            <div class="apq-preview-mode">
+                <span class="muted" data-bind="visible: !previewPinned()">Following the queue</span>
+                <span data-bind="visible: previewPinned">
+                    <span class="muted">Pinned</span> ·
+                    <a href="#" data-bind="click: previewFollow">follow the queue</a>
+                </span>
+            </div>
+        </div>
+    </div>
 </div>
